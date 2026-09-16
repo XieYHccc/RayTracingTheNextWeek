@@ -1,12 +1,24 @@
 #include "rtweekend.h"
 
+#include "bvh.h"
 #include "camera.h"
 #include "hittable.h"
 #include "hittable_list.h"
 #include "sphere.h"
 
+#include <chrono>
+#include <iomanip>
+
 
 int main() {
+    // Use steady_clock: it is monotonic, so it can't be skewed by system time adjustments.
+    using clock = std::chrono::steady_clock;
+    auto seconds_since = [](clock::time_point t0, clock::time_point t1) {
+        return std::chrono::duration<double>(t1 - t0).count();
+    };
+
+    auto t_start = clock::now();
+
     hittable_list world;
 
     auto ground_material = make_shared<lambertian>(color(0.5, 0.5, 0.5));
@@ -52,11 +64,17 @@ int main() {
     auto material3 = make_shared<metal>(color(0.7, 0.6, 0.5), 0.0);
     world.add(make_shared<sphere>(point3(4, 1, 0), 1.0, material3));
 
+    auto t_scene = clock::now();
+
+    world = hittable_list(make_shared<bvh_node>(world));
+
+    auto t_bvh = clock::now();
+
     camera cam;
 
     cam.aspect_ratio = 16.0 / 9.0;
     cam.image_width = 400;
-    cam.samples_per_pixel = 100;
+    cam.samples_per_pixel = 500;
     cam.max_depth = 50;
 
     cam.vfov = 20;
@@ -68,5 +86,14 @@ int main() {
     cam.focus_dist = 10.0;
 
     cam.render(world);
+
+    auto t_end = clock::now();
+
+    // The image goes to stdout, so timings must go to stderr to keep the PPM intact.
+    std::clog << std::fixed << std::setprecision(3)
+        << "Scene build: " << seconds_since(t_start, t_scene) << " s\n"
+        << "BVH build:   " << seconds_since(t_scene, t_bvh) << " s\n"
+        << "Render:      " << seconds_since(t_bvh, t_end) << " s\n"
+        << "Total:       " << seconds_since(t_start, t_end) << " s\n";
 }
 
